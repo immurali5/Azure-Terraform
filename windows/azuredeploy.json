@@ -1,0 +1,170 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "satyaType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "satya-windowsName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "satya-windowsAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "satya-windowsAdminPassword": {
+      "type": "securestring"
+    },
+    "satya-windowsWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2012-R2-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    }},
+  "variables": {
+    "satyaName": "[concat('satya', uniqueString(resourceGroup().id))]",
+    "satya-vnetPrefix": "192.168.1.10/16",
+    "satya-vnetSubnet1Name": "satya-Subnet-1",
+    "satya-vnetSubnet1Prefix": "192.168.1.10/24",
+    "satya-vnetSubnet2Name": "satya-Subnet-2",
+    "satya-vnetSubnet2Prefix": "192.168.2.0/24",
+    "satya-windowsImagePublisher": "MicrosoftWindowsServer",
+    "satya-windowsImageOffer": "WindowsServer",
+    "satya-windowsOSDiskName": "satya-windowsOSDisk",
+    "satya-windowsVmSize": "Standard_D2_v2",
+    "satya-windowsVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'satya-vnet')]",
+    "satya-windowsSubnetRef": "[concat(variables('satya-windowsVnetID'), '/subnets/', variables('satya-vnetSubnet1Name'))]",
+    "satya-windowsStorageAccountContainerName": "vhds",
+    "satya-windowsNicName": "[concat(parameters('satya-windowsName'), 'NetworkInterface')]"},
+  "resources": [
+    {
+      "name": "[variables('satyaName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-01-01",
+      "sku": {
+        "name": "[parameters('satyaType')]"
+      },
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "satya"
+      },
+      "kind": "Storage"
+    },
+    {
+      "name": "satya-vnet",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "satya-vnet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('satya-vnetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('satya-vnetSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('satya-vnetSubnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('satya-vnetSubnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('satya-vnetSubnet2Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('satya-windowsNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'satya-vnet')]"
+      ],
+      "tags": {
+        "displayName": "satya-windowsNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('satya-windowsSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('satya-windowsName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('satyaName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('satya-windowsNicName'))]"
+      ],
+      "tags": {
+        "displayName": "satya-windows"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('satya-windowsVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('satya-windowsName')]",
+          "adminUsername": "[parameters('satya-windowsAdminUsername')]",
+          "adminPassword": "[parameters('satya-windowsAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('satya-windowsImagePublisher')]",
+            "offer": "[variables('satya-windowsImageOffer')]",
+            "sku": "[parameters('satya-windowsWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "satya-windowsOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('satyaName')), '2016-01-01').primaryEndpoints.blob, variables('satya-windowsStorageAccountContainerName'), '/', variables('satya-windowsOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('satya-windowsNicName'))]"
+            }
+          ]
+        }
+      }
+    }],
+  "outputs": {}
+}
